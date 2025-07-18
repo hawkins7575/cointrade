@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>코인 매매 기록</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card { background: white; border-radius: 10px; padding: 20px; margin: 20px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { text-align: center; color: #333; margin-bottom: 30px; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
+        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; text-align: center; }
+        .form-group { margin: 15px 0; }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        input, textarea, select { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 16px; }
+        input:focus, textarea:focus { border-color: #667eea; outline: none; }
+        button { background: #667eea; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin: 5px; }
+        button:hover { background: #5a6fd8; }
+        button.delete { background: #e74c3c; }
+        button.delete:hover { background: #c0392b; }
+        .tabs { display: flex; border-bottom: 2px solid #eee; margin-bottom: 20px; }
+        .tab { padding: 15px 25px; cursor: pointer; border-bottom: 3px solid transparent; font-weight: bold; }
+        .tab.active { border-bottom-color: #667eea; color: #667eea; }
+        .tab:hover { background: #f8f9fa; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; font-weight: bold; }
+        tr:hover { background: #f8f9fa; }
+        .profit { color: #27ae60; font-weight: bold; }
+        .loss { color: #e74c3c; font-weight: bold; }
+        .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+        .calendar-day { aspect-ratio: 1; padding: 10px; border: 1px solid #eee; background: white; cursor: pointer; font-size: 12px; }
+        .calendar-day:hover { background: #f0f8ff; }
+        .calendar-day.has-trade { background: #e8f5e8; border-color: #27ae60; }
+        .calendar-day.today { background: #667eea; color: white; }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; z-index: 1000; }
+        .modal.show { display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 10px; width: 90%; max-width: 500px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1 class="header">💰 코인 매매 기록 관리</h1>
+            
+            <div class="tabs">
+                <div class="tab active" onclick="showTab('dashboard')">📊 대시보드</div>
+                <div class="tab" onclick="showTab('add')">➕ 거래추가</div>
+                <div class="tab" onclick="showTab('calendar')">📅 달력</div>
+                <div class="tab" onclick="showTab('history')">📋 내역</div>
+            </div>
+
+            <!-- 대시보드 -->
+            <div id="dashboard" class="tab-content">
+                <div class="stats" id="statsContainer">
+                    <!-- 통계 카드들이 여기에 표시됩니다 -->
+                </div>
+            </div>
+
+            <!-- 거래 추가 -->
+            <div id="add" class="tab-content hidden">
+                <h2>새 거래 추가</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>날짜</label>
+                        <input type="date" id="tradeDate">
+                    </div>
+                    <div class="form-group">
+                        <label>입금</label>
+                        <input type="number" id="tradeEntry" placeholder="0" oninput="calculateProfit()">
+                    </div>
+                    <div class="form-group">
+                        <label>출금</label>
+                        <input type="number" id="tradeWithdrawal" placeholder="0" oninput="calculateProfit()">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>잔고</label>
+                        <input type="number" id="tradeBalance" placeholder="현재 잔고" oninput="calculateProfit()">
+                    </div>
+                    <div class="form-group">
+                        <label>수익</label>
+                        <input type="text" id="calculatedProfit" readonly style="background: #f8f9fa;">
+                    </div>
+                    <div class="form-group">
+                        <label>수익률</label>
+                        <input type="text" id="calculatedProfitRate" readonly style="background: #f8f9fa;">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>메모</label>
+                    <textarea id="tradeMemo" rows="3" placeholder="거래 관련 메모"></textarea>
+                </div>
+                <button onclick="addTrade()">거래 추가</button>
+            </div>
+
+            <!-- 달력 -->
+            <div id="calendar" class="tab-content hidden">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>매매 달력</h2>
+                    <div>
+                        <button onclick="changeMonth(-1)">←</button>
+                        <span id="currentMonth" style="margin: 0 20px; font-weight: bold;"></span>
+                        <button onclick="changeMonth(1)">→</button>
+                    </div>
+                </div>
+                <div class="calendar" id="calendarGrid">
+                    <!-- 달력이 여기에 표시됩니다 -->
+                </div>
+            </div>
+
+            <!-- 거래 내역 -->
+            <div id="history" class="tab-content hidden">
+                <h2>거래 내역</h2>
+                <div id="tradesTable">
+                    <!-- 거래 테이블이 여기에 표시됩니다 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 메모 모달 -->
+    <div id="memoModal" class="modal">
+        <div class="modal-content">
+            <h3 id="memoDate">메모</h3>
+            <textarea id="memoText" rows="5" style="margin: 20px 0;" placeholder="메모를 입력하세요..."></textarea>
+            <div>
+                <button onclick="saveMemo()">저장</button>
+                <button onclick="closeMemo()" style="background: #6c757d;">취소</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let trades = JSON.parse(localStorage.getItem('coinTrades') || '[]');
+        let currentDate = new Date();
+        let selectedDate = null;
+
+        // 초기화
+        document.getElementById('tradeDate').value = new Date().toISOString().split('T')[0];
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.getElementById(tabName).classList.remove('hidden');
+            event.target.classList.add('active');
+            
+            if (tabName === 'dashboard') updateStats();
+            if (tabName === 'calendar') updateCalendar();
+            if (tabName === 'history') updateHistory();
+        }
+
+        function addTrade() {
+            const date = document.getElementById('tradeDate').value;
+            const entry = parseFloat(document.getElementById('tradeEntry').value) || 0;
+            const withdrawal = parseFloat(document.getElementById('tradeWithdrawal').value) || 0;
+            const balance = parseFloat(document.getElementById('tradeBalance').value);
+            const memo = document.getElementById('tradeMemo').value;
+
+            if (!date || !balance) {
+                alert('날짜와 잔고는 필수입니다.');
+                return;
+            }
+
+            let profit = 0;
+            if (trades.length > 0) {
+                const prevBalance = trades[trades.length - 1].balance;
+                profit = balance - (prevBalance + entry - withdrawal);
+            } else {
+                profit = balance - entry + withdrawal;
+            }
+
+            const profitRate = entry > 0 ? ((profit / entry) * 100).toFixed(2) : 0;
+
+            trades.push({
+                id: Date.now(),
+                date,
+                entry,
+                withdrawal,
+                balance,
+                profit: parseFloat(profit.toFixed(2)),
+                profitRate: parseFloat(profitRate),
+                memo
+            });
+
+            trades.sort((a, b) => new Date(a.date) - new Date(b.date));
+            localStorage.setItem('coinTrades', JSON.stringify(trades));
+
+            // 폼 초기화
+            document.getElementById('tradeEntry').value = '';
+            document.getElementById('tradeWithdrawal').value = '';
+            document.getElementById('tradeBalance').value = '';
+            document.getElementById('tradeMemo').value = '';
+            document.getElementById('calculatedProfit').value = '';
+            document.getElementById('calculatedProfitRate').value = '';
+
+            alert('거래가 추가되었습니다!');
+            updateStats();
+        }
+
+        function calculateProfit() {
+            const entry = parseFloat(document.getElementById('tradeEntry').value) || 0;
+            const withdrawal = parseFloat(document.getElementById('tradeWithdrawal').value) || 0;
+            const balance = parseFloat(document.getElementById('tradeBalance').value) || 0;
+
+            let profit = 0;
+            if (trades.length > 0) {
+                const prevBalance = trades[trades.length - 1].balance;
+                profit = balance - (prevBalance + entry - withdrawal);
+            } else {
+                profit = balance - entry + withdrawal;
+            }
+
+            const profitRate = entry > 0 ? ((profit / entry) * 100).toFixed(2) : 0;
+
+            document.getElementById('calculatedProfit').value = profit.toFixed(0);
+            document.getElementById('calculatedProfitRate').value = profitRate + '%';
+        }
+
+        function updateStats() {
+            const totalProfit = trades.reduce((sum, trade) => sum + trade.profit, 0);
+            const totalInvested = trades.reduce((sum, trade) => sum + trade.entry, 0);
+            const currentBalance = trades.length > 0 ? trades[trades.length - 1].balance : 0;
+            const winningTrades = trades.filter(trade => trade.profit > 0).length;
+            const winRate = trades.length > 0 ? ((winningTrades / trades.length) * 100).toFixed(1) : 0;
+
+            document.getElementById('statsContainer').innerHTML = `
+                <div class="stat-card">
+                    <h3>총 투자금</h3>
+                    <h2>₩${totalInvested.toLocaleString()}</h2>
+                </div>
+                <div class="stat-card">
+                    <h3>현재 잔고</h3>
+                    <h2>₩${currentBalance.toLocaleString()}</h2>
+                </div>
+                <div class="stat-card">
+                    <h3>총 수익</h3>
+                    <h2 class="${totalProfit >= 0 ? 'profit' : 'loss'}">₩${totalProfit.toLocaleString()}</h2>
+                </div>
+                <div class="stat-card">
+                    <h3>승률</h3>
+                    <h2>${winRate}% (${trades.length}회)</h2>
+                </div>
+            `;
+        }
+
+        function updateCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            
+            document.getElementById('currentMonth').textContent = `${year}년 ${month + 1}월`;
+            
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const startDate = new Date(firstDay);
+            startDate.setDate(startDate.getDate() - firstDay.getDay());
+
+            let calendarHTML = '<div style="grid-column: span 7; display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 10px;">';
+            ['일', '월', '화', '수', '목', '금', '토'].forEach(day => {
+                calendarHTML += `<div style="text-align: center; font-weight: bold; padding: 10px;">${day}</div>`;
+            });
+            calendarHTML += '</div>';
+
+            for (let i = 0; i < 42; i++) {
+                const currentDay = new Date(startDate);
+                currentDay.setDate(startDate.getDate() + i);
+                
+                const isCurrentMonth = currentDay.getMonth() === month;
+                const isToday = currentDay.toDateString() === new Date().toDateString();
+                const trade = trades.find(t => t.date === currentDay.toISOString().split('T')[0]);
+                
+                let classes = 'calendar-day';
+                if (isToday) classes += ' today';
+                if (trade) classes += ' has-trade';
+                
+                calendarHTML += `
+                    <div class="${classes}" onclick="openMemo('${currentDay.toISOString().split('T')[0]}')">
+                        <div style="font-weight: bold;">${currentDay.getDate()}</div>
+                        ${trade ? `
+                            <div class="${trade.profit >= 0 ? 'profit' : 'loss'}" style="font-size: 10px;">
+                                ${trade.profitRate >= 0 ? '+' : ''}${trade.profitRate}%
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            document.getElementById('calendarGrid').innerHTML = calendarHTML;
+        }
+
+        function updateHistory() {
+            if (trades.length === 0) {
+                document.getElementById('tradesTable').innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">거래 내역이 없습니다.</p>';
+                return;
+            }
+
+            let tableHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>날짜</th>
+                            <th>입금</th>
+                            <th>출금</th>
+                            <th>잔고</th>
+                            <th>수익</th>
+                            <th>수익률</th>
+                            <th>작업</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            trades.forEach(trade => {
+                tableHTML += `
+                    <tr>
+                        <td>${trade.date}</td>
+                        <td style="color: #3498db;">₩${trade.entry.toLocaleString()}</td>
+                        <td style="color: #e67e22;">₩${trade.withdrawal.toLocaleString()}</td>
+                        <td>₩${trade.balance.toLocaleString()}</td>
+                        <td class="${trade.profit >= 0 ? 'profit' : 'loss'}">₩${trade.profit.toLocaleString()}</td>
+                        <td class="${trade.profitRate >= 0 ? 'profit' : 'loss'}">${trade.profitRate}%</td>
+                        <td>
+                            ${trade.memo ? `<button onclick="openMemo('${trade.date}')" style="background: #27ae60; font-size: 12px; padding: 5px 10px;">메모</button>` : ''}
+                            <button onclick="deleteTrade(${trade.id})" class="delete" style="font-size: 12px; padding: 5px 10px;">삭제</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tableHTML += '</tbody></table>';
+            document.getElementById('tradesTable').innerHTML = tableHTML;
+        }
+
+        function changeMonth(direction) {
+            currentDate.setMonth(currentDate.getMonth() + direction);
+            updateCalendar();
+        }
+
+        function openMemo(date) {
+            selectedDate = date;
+            const trade = trades.find(t => t.date === date);
+            document.getElementById('memoDate').textContent = new Date(date).toLocaleDateString('ko-KR') + ' 메모';
+            document.getElementById('memoText').value = trade ? trade.memo || '' : '';
+            document.getElementById('memoModal').classList.add('show');
+        }
+
+        function closeMemo() {
+            document.getElementById('memoModal').classList.remove('show');
+        }
+
+        function saveMemo() {
+            const memo = document.getElementById('memoText').value;
+            const tradeIndex = trades.findIndex(t => t.date === selectedDate);
+            
+            if (tradeIndex >= 0) {
+                trades[tradeIndex].memo = memo;
+            } else if (memo.trim()) {
+                trades.push({
+                    id: Date.now(),
+                    date: selectedDate,
+                    entry: 0,
+                    withdrawal: 0,
+                    balance: trades.length > 0 ? trades[trades.length - 1].balance : 0,
+                    profit: 0,
+                    profitRate: 0,
+                    memo,
+                    isMemoOnly: true
+                });
+                trades.sort((a, b) => new Date(a.date) - new Date(b.date));
+            }
+            
+            localStorage.setItem('coinTrades', JSON.stringify(trades));
+            closeMemo();
+            updateCalendar();
+        }
+
+        function deleteTrade(id) {
+            if (confirm('정말 삭제하시겠습니까?')) {
+                trades = trades.filter(trade => trade.id !== id);
+                localStorage.setItem('coinTrades', JSON.stringify(trades));
+                updateHistory();
+                updateStats();
+            }
+        }
+
+        // 초기 로딩
+        updateStats();
+    </script>
+</body>
+</html>
